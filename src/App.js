@@ -1,82 +1,195 @@
-import React, {Component} from 'react';
+import React, { Component } from 'react';
+import './App.css';
+
 import * as cocoSsd from "@tensorflow-models/coco-ssd";
 import "@tensorflow/tfjs";
-import './App.css';
-import './style.css';
 
-class App extends Component() {
+class App extends Component {
+  state = {
+    btnDeviceId: null,
+    model: null,
+    width: 360,
+    height: 480,
+  }
+
+  videoRef = React.createRef();
+  canvasRef = React.createRef();
+
   componentDidMount() {
-    const video = document.getElementById("video");
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       const webCamPromise = navigator.mediaDevices
         .getUserMedia({
-          audio: false,
-          video: {
-            facingMode: "environment"
-          }
+          video: true
         })
-        .then(stream => {
-          video.srcObject = stream;
+        .then((stream) => {
+          window.stream = stream;
+          this.videoRef.current.srcObject = stream;
+
+          navigator.mediaDevices
+            .enumerateDevices()
+            .then((devices) => {
+              devices
+                .filter((device) => device.kind === "videoinput")
+                .forEach((device) => {
+                  this.setState({
+                    btnDeviceId: (
+                      <button onClick={() => this.changeDevice(device.deviceId)}>
+                        {device.label}
+                      </button>
+                    )
+                  })
+                })
+            });
+
           return new Promise((resolve, reject) => {
-            video.onloadedmetadata = () => {
-              video.play();
+            this.videoRef.current.onloadedmetadata = () => {
               resolve();
             };
           });
         });
+
       const modelPromise = cocoSsd.load();
-      Promise.all([modelPromise, webCamPromise]).then(values => {
-        this.detectFrame(video, values[0]);
-      });
+
+      Promise.all([modelPromise, webCamPromise])
+        .then((values) => {
+          this.setState({
+            model: 1,
+          })
+          this.detectFrame(this.videoRef.current, values[0]);
+        })
+        .catch((error) => {
+          console.error(error);
+        });
     }
   }
 
   detectFrame = (video, model) => {
-    model.detect(video).then(predictions => {
-      this.renderPredictions(predictions);
-      requestAnimationFrame(() => {
-        this.detectFrame(video, model);
-      });
-    });
-  };
+    model.detect(video)
+      .then((predictions) => {
+        this.renderPredictions(predictions);
 
-  renderPredictions = predictions => {
-    const c = document.getElementById("canvas");
-    const ctx = c.getContext("2d");
+        requestAnimationFrame(() => {
+          this.detectFrame(video, model);
+        });
+      });
+  }
+
+  renderPredictions = (predictions) => {
+    const ctx = this.canvasRef.current.getContext('2d');
+
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    // Font options.
+
+    // Font options
     const font = "16px sans-serif";
     ctx.font = font;
     ctx.textBaseline = "top";
-    predictions.forEach(prediction => {
+
+    predictions.forEach((prediction) => {
       const x = prediction.bbox[0];
       const y = prediction.bbox[1];
       const width = prediction.bbox[2];
       const height = prediction.bbox[3];
-      // Draw the bounding box.
+
+      // Draw the bounding box
       ctx.strokeStyle = "#00FFFF";
       ctx.lineWidth = 4;
       ctx.strokeRect(x, y, width, height);
-      // Draw the label background.
+
+      // Draw the label background
       ctx.fillStyle = "#00FFFF";
+
       const textWidth = ctx.measureText(prediction.class).width;
-      const textHeight = parseInt(font, 10); // base 10
+      const textHeight = parseInt(font, 10);
+
       ctx.fillRect(x, y, textWidth + 4, textHeight + 4);
     });
 
-    predictions.forEach(prediction => {
+    predictions.forEach((prediction) => {
       const x = prediction.bbox[0];
       const y = prediction.bbox[1];
-      // Draw the text last to ensure it's on top.
+
+      // Draw the text last to ensure it's on top
       ctx.fillStyle = "#000000";
       ctx.fillText(prediction.class, x, y);
     });
-  };
+  }
+
+  /* Change facing mode */
+  changeFacingMode = (facingMode) => {
+    if (this.videoRef.current.srcObject) {
+      this.videoRef.current.srcObject
+        .getTracks()
+        .forEach((track) => track.stop());
+
+      this.videoRef.current.srcObject = null;
+    }
+
+    navigator.mediaDevices
+      .getUserMedia({
+        video: {
+          facingMode: facingMode,
+        }
+      })
+      .then((stream) => this.videoRef.current.srcObject = stream);
+  }
+
+  /* Change device */
+  changeDevice = (deviceId) => {
+    if (this.videoRef.current.srcObject) {
+      this.videoRef.current.srcObject
+        .getTracks()
+        .forEach((track) => track.stop());
+
+      this.videoRef.current.srcObject = null;
+    }
+
+    navigator.mediaDevices
+      .getUserMedia({
+        video: {
+          deviceId: deviceId,
+        }
+      })
+      .then((stream) => this.videoRef.current.srcObject = stream);
+  }
+
   render() {
     return (
-      <div>
-        <video muted id="video" width="600" height="500" />
-        <canvas id="canvas" width="600" height="500" />
+      <div className="App">
+        <div id="preview">
+          <video
+            autoPlay
+            playsInline
+            muted
+            ref={this.videoRef}
+            width={this.state.width}
+            height={this.state.height}
+            className="fixed"
+          />
+          <canvas
+            ref={this.canvasRef}
+            width={this.state.width}
+            height={this.state.height}
+            className="fixed"
+          />
+        </div>
+        {this.state.btnDeviceId && (
+          <div class="btn-device-container">
+            <p>
+              Click button below to access back camera
+            </p>
+            <div id="btnDeviceIdContainer">
+              {this.state.btnDeviceId}
+            </div>
+          </div>
+        )}
+        {!this.state.model && (
+          <div class="loader" style={{width: this.state.width, height: this.state.height}}>
+            Loading model...
+          </div>
+        )}
+        <footer>
+          &copy; FourOhFour 2019
+        </footer>
       </div>
     );
   }
