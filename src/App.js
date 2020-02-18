@@ -8,7 +8,7 @@ class App extends Component {
   state = {
     btnDeviceId: null,
     model: null,
-    width: 360,
+    width: 1080,
     height: 480,
   }
 
@@ -187,9 +187,6 @@ class App extends Component {
             Loading model...
           </div>
         )}
-        <footer>
-          &copy; FourOhFour 2019
-        </footer>
       </div>
     );
   }
